@@ -1,0 +1,9 @@
+# R session / workspace files
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# OS files
+.DS_Store
+Thumbs.db
