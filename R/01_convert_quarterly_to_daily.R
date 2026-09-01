@@ -4,7 +4,9 @@
 # CPAT（稅後企業利潤）等總經指標僅以「季」為頻率公布，但目標變數 S&P 500
 # 與其他多數特徵（VIX、EPU...）皆為日頻資料。為了讓所有特徵能以「日」為
 # 單位對齊、合併，這裡以該季第一天的公布值，前向填補 (forward-fill) 到
-# 該季的每一天。
+# 下一季公布為止。最後一季的公布值會持續前向填補到緩衝期（+2年），實際
+# 有效範圍由合併時 na.omit() 依其他特徵的實際涵蓋範圍自然截斷——這對應
+# 真實情境中「還沒公布下一期數字前，沿用最近一期已知值」的假設。
 #
 # 輸入 (raw, 未清理): data/raw/CPAT_train_raw.csv, data/raw/CPAT_test_raw.csv
 # 輸出 (清理後，日頻): data/train/CPAT_train.csv, data/test/CPAT_test.csv
@@ -26,9 +28,12 @@ convert_quarterly_to_daily <- function(input_path, output_path, indicator_name) 
   quarterly_data$Date <- ymd(quarterly_data$Date)
   quarterly_data[[indicator_name]] <- as.numeric(quarterly_data[[indicator_name]])
 
-  daily_rows <- lapply(seq_len(nrow(quarterly_data)), function(i) {
+  n <- nrow(quarterly_data)
+  daily_rows <- lapply(seq_len(n), function(i) {
     start_date <- quarterly_data$Date[i]
-    end_date <- start_date %m+% months(3) - days(1)  # 該季最後一天
+    # 前向填補至下一筆公布日的前一天；最後一筆延伸 2 年做為緩衝，
+    # 真正有效範圍交由合併步驟依其他特徵的涵蓋範圍截斷
+    end_date <- if (i < n) quarterly_data$Date[i + 1] - days(1) else start_date %m+% years(2)
     data.frame(Date = seq(start_date, end_date, by = "day"),
                value = quarterly_data[[indicator_name]][i])
   })

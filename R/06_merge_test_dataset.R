@@ -18,21 +18,27 @@ files <- list.files(test_dir, pattern = "\\.csv$", full.names = TRUE)
 
 if (length(files) == 0) stop("找不到任何 CSV 檔案，請確認 data/test 是否存在。")
 
-# 明確指定 Date 欄為字串型別：readr 對「YYYY/MM/DD」格式的欄位會依抽樣結果
-# 自動猜測型別，有時猜成 Date、有時猜成 character，猜測結果不一致會導致
-# 後面 left_join 用的字串鍵值格式對不上（例如 "2000/10/01" vs "2000-10-01"），
-# 使 join 全部配不到、na.omit() 後整個資料集被清空。
-main_df <- read_csv(files[1], col_types = cols(Date = col_character()), show_col_types = FALSE)
-colnames(main_df)[1] <- "Date"
+# 明確指定 Date 欄為字串型別，並統一經過 as.Date() 正規化再轉回固定格式：
+# readr 對「YYYY/MM/DD」格式的欄位會依抽樣結果自動猜測型別（有時猜成
+# Date、有時猜成 character），加上部分來源檔（如未經處理的 EPU）日期沒有
+# 補零（"2024/1/1" 而非 "2024/01/01"），這些差異都會讓 left_join 用的字串
+# 鍵值對不上，使 join 大量配不到、na.omit() 後資料被過度刪減。
+read_with_normalized_date <- function(path) {
+  df <- read_csv(path, col_types = cols(Date = col_character()), show_col_types = FALSE)
+  colnames(df)[1] <- "Date"
+  df$Date <- format(as.Date(df$Date, format = "%Y/%m/%d"), "%Y-%m-%d")
+  df
+}
+
+main_df <- read_with_normalized_date(files[1])
 
 for (i in 2:length(files)) {
-  temp_df <- read_csv(files[i], col_types = cols(Date = col_character()), show_col_types = FALSE)
-  colnames(temp_df)[1] <- "Date"
+  temp_df <- read_with_normalized_date(files[i])
   main_df <- left_join(main_df, temp_df, by = "Date")
 }
 
 main_df <- na.omit(main_df)
-main_df$Date <- as.Date(main_df$Date, format = "%Y/%m/%d")
+main_df$Date <- as.Date(main_df$Date)
 main_df <- main_df %>% arrange(Date)
 
 write_csv(main_df, "data/processed/merged_test_data.csv")
