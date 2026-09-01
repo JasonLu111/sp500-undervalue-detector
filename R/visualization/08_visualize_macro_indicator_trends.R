@@ -29,7 +29,7 @@ p <- ggplot(df_long, aes(x = Date, y = value, color = indicator)) +
   facet_wrap(~ indicator, scales = "free_y", ncol = 3) +
   labs(
     title = "總體經濟特徵走勢（訓練集抽樣 1000 筆）",
-    subtitle = "各指標獨立 y 軸尺度，用於建模前的探索性資料分析",
+    subtitle = "各指標使用獨立座標尺度，用於建模前的探索性資料分析",
     x = NULL, y = NULL
   ) +
   theme_minimal(base_size = 11) +

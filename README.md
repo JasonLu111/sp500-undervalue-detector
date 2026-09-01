@@ -15,8 +15,8 @@
 | 能力 | 在這個專案中的具體展現 |
 |---|---|
 | **資料清理與預處理** | 9 種頻率不一致（日／月／季）的總經指標，統一展開為日頻資料；VIX 缺值以三次樣條插值（而非簡單填補）補齊；多來源資料以 `Date` 為鍵做 9 路 left join；時間序列採「時間切分」而非隨機切分，避免用未來資料預測過去 |
-| **資料視覺化** | 以 R（ggplot2）繪製估值分類時間軸、總經指標小圖 (small multiples)、類別分布與特徵區隔力盒鬚圖；另有團隊以 KNIME 產出的散佈圖矩陣、LDA 投影與 workflow 架構圖 |
-| **R 語言** | 全部資料前處理管線（`R/01`–`R/06`）皆以 R（`dplyr`、`readr`、`lubridate`、`zoo`、`tidyr`、`ggplot2`）撰寫；程式碼經重構去除原始版本中重複複製貼上的區塊，改寫成可重用函式 |
+| **資料視覺化** | 以 R（ggplot2 + patchwork）將估值時間軸、總經指標小圖 (small multiples)、類別分布、特徵區隔力盒鬚圖組成單一組合圖；並針對團隊以 KNIME 產出的散佈圖矩陣、LDA 投影、模型評估表、混淆矩陣，逐一寫出資料分析詮釋 |
+| **R 語言** | 全部資料前處理管線（`R/01`–`R/06`）與視覺化（`R/visualization/`）皆以 R（`dplyr`、`readr`、`lubridate`、`zoo`、`tidyr`、`ggplot2`、`patchwork`）撰寫；程式碼經重構去除原始版本中重複複製貼上的區塊，改寫成可重用函式 |
 | **方法論嚴謹度／除錯能力** | `R/valuation_classification/` 保留 v1 → v6 的完整迭代紀錄，其中 v5 修正了 v2–v4 版本中「用當日前後 ±365 天資料計算 z-score」所造成的 **look-ahead bias（資料洩漏）**，改為只使用歷史資料的滾動窗口 |
 
 ---
@@ -65,7 +65,7 @@ valuation_classification/  滾動 Z-score 高低估分類 (v1 → v6 迭代，�
    ▼
 data/processed/  ── 建模用最終資料集 ──▶  KNIME：特徵篩選、LDA、Random Forest 分類
    ▼
-visualization/  以 R (ggplot2) 產出估值時間軸、指標走勢、類別分布圖
+visualization/  以 R (ggplot2 + patchwork) 產出估值時間軸、指標走勢、類別分布圖
 ```
 
 ### 架構圖
@@ -116,29 +116,65 @@ flowchart TD
 
 ## 資料視覺化
 
-**R（ggplot2，本次求職作品集補充）**
+**R（ggplot2 + patchwork，本次求職作品集補充）**
 
-| | |
-|---|---|
-| ![S&P 500 估值時間軸](docs/images/sp500_valuation_timeline.png) | ![總經指標走勢](docs/images/macro_indicator_trends.png) |
-| ![類別分布](docs/images/valuation_class_balance.png) | ![VIX 於各類別分布](docs/images/vix_by_valuation_boxplot.png) |
+![R 資料視覺化總覽](docs/images/r_visualization_dashboard.png)
 
-對應腳本：[`R/visualization/`](R/visualization)（`07` 估值時間軸／`08` 指標走勢小圖／`09` 類別分布與特徵區隔力）
+單一組合圖，由上而下：估值時間軸（疊加 4 級分類）、9 項總經指標走勢 (small multiples)、估值類別樣本數分布、VIX 於各類別的區隔力盒鬚圖。對應腳本：[`R/visualization/07`–`09`](R/visualization) 各自產生單張圖，[`10_combine_dashboard.R`](R/visualization/10_combine_dashboard.R) 用 `patchwork` 組成上圖。
 
-**KNIME（團隊產出，特徵篩選與模型結果，取自實際繳交的期末報告）**
+## 結果詮釋（Results & Interpretation）
 
-| | |
-|---|---|
-| ![散佈圖矩陣](docs/images/scatter_plot_matrix.png) | ![LDA 三維投影](docs/images/lda_dimension_3.png) |
+特徵篩選、LDA 降維、監督式分類建模（Decision Tree、Random Forest、SVM、KNN、Naïve Bayes、Logistic Regression）與 10 次交叉驗證評估，皆由團隊在 [`knime/`](knime) 的兩支 workflow 中完成：`第一波篩選模型.knwf`（初步特徵篩選）、`第二波評價模型.knwf`（分類模型建置與績效評估）。以下是實際繳交報告中最關鍵的幾頁分析與對應詮釋。
 
-![KNIME 第一波篩選模型主要 workflow 架構](docs/images/knime_workflow_architecture.png)
+**特徵相關性：2001–2023 資料回測散佈圖矩陣**
 
-## 建模與結果摘要
+![散佈圖矩陣](docs/images/scatter_plot_matrix.png)
 
-特徵篩選、監督式分類建模（含 LDA 降維、Random Forest 等方法）與 k-fold 交叉驗證評估，於 [`knime/`](knime) 中的兩支 KNIME workflow 完成：
+1. EPU、VIX 等反映不確定性的指數，與其他指數呈現近零相關。
+2. 通膨預期（INFE2）和其他指數呈現弱正相關，可見市場預期和實際經濟略微脫節。
+3. CPI、JOP、PPI、CPAT 在高位時呈現正相關，低檔則出現拗折 (kinked)。
+4. 可能原因：物價指數與企業活動，需超過某個臨界值才會出現顯著正相關。
 
-- `第一波篩選模型.knwf`：初步特徵篩選
-- `第二波評價模型.knwf`：分類模型建置與績效評估（Accuracy、F1、混淆矩陣）
+**LDA 降維後的分類分離度**
+
+![LDA 三維投影](docs/images/lda_dimension_3.png)
+
+LDA + Random Forest 的表現，比純 Random Forest 略差，從投影圖可以看出可能原因：
+
+1. `Significantly Overvalued` 和 `Overvalued` 兩類的點仍大量疊在一起。
+2. `Overvalued` 和 `Undervalued` 大部分仍疊著，只有 `Significantly Undervalued` 有明顯分開。也因此，各分類器加入 LDA 後對 Accuracy／F-measure 大多沒有顯著幫助，甚至更差。
+
+**模型評估：Random Feature Selection + Random Forest 表現最佳、最穩定**
+
+![Random Forest 特徵篩選評估表](docs/images/knime_evaluation_random_forest.png)
+
+Random Forest 分別搭配 Forward／Backward／Random 三種特徵篩選方式，在 2001–2023 回測與 2023–2025 未知測試集上的 F-measure 都比其他分類器高，代表整體穩定、可用度高；其中 **Random Feature Selection** 的組合（特徵：CPI、CPAT、EPU、INFE2、JOP、PPI、VIX）在測試集達到 **Accuracy 96.7% ± 0.2、F-measure 86.2% ± 13.5**，是報告中表現最佳的模型。模型僅篩選掉 FFR（聯邦基準利率）與 RBE（實質匯率），推測是因為 EPU、VIX 已經反映市場對利率變化的不確定性，CPI、PPI 等物價指數也已部分反映美國的貿易條件。
+
+**混淆矩陣（測試集，2023–2025）**
+
+![混淆矩陣](docs/images/knime_confusion_matrix.png)
+
+| | 總數 |
+|---|---:|
+| True Positive | 321 |
+| False Positive | 11 |
+| False Negative | 11 |
+| True Negative | 653 |
+
+模型並不完美：混淆矩陣中存在一定比例的 false negative——實際為低估 (undervalued) 的股市狀態，模型誤判為高估 (overvalued)，回測近 22 年整體約有 **21% 的 undervalued 被誤判為 overvalued**，是後續最需要改進的方向。
+
+**為什麼 Random Forest 表現最好**
+
+Random Forest 是 Decision Tree 的進階版：建立多棵隨機選取資料與特徵的樹，再以多數決 (majority voting) 平均出最終結果。單棵 Decision Tree 雖然容易解釋、能清楚呈現推理過程，但對雜訊非常敏感——尤其樹夠深時，資料的微小變化就可能讓準確率有不小差異，也容易 overfitting。Random Forest 把很多棵樹的結果平均起來，雜訊也跟著被平均掉、變得更小，因此準確率比傳統 Decision Tree 更高，對這種資料量有限的問題特別有幫助。相對地，Logistic Regression 假設資料線性可分，不適合這種非線性的股市估值問題，是六個分類器中表現最差的一個。
+
+**結論**
+
+![結論](docs/images/knime_conclusion.png)
+
+1. 模型對近期股市有約 97% 的預測準確度，但回測近 22 年，準確度降至約 86%；觀察混淆矩陣可知，有約 21% 的 undervalued 被誤判為 overvalued。
+2. 未來規劃：將 KNIME 的流程以 Python 整合，並嘗試用 TensorFlow 導入更多進階模型。
+3. 合併訓練資料時，可以不用隨機種子抽樣，讓模型學習更完整的資料。
+4. 嘗試納入更多潛在的總體經濟特徵，提升新模型對未來股市資料的泛化能力。
 
 ---
 
@@ -169,7 +205,7 @@ sp500-undervalue-detector/
 ## 如何執行
 
 ```r
-install.packages(c("readr", "dplyr", "tidyr", "lubridate", "zoo", "ggplot2"))
+install.packages(c("readr", "dplyr", "tidyr", "lubridate", "zoo", "ggplot2", "patchwork"))
 
 # 依序執行資料前處理管線（工作目錄需為本 repo 根目錄）
 source("R/01_convert_quarterly_to_daily.R")
@@ -180,10 +216,11 @@ source("R/valuation_classification/v6_final_reusable_function.R")
 source("R/05_merge_train_dataset.R")
 source("R/06_merge_test_dataset.R")
 
-# 產出視覺化圖表
+# 產出視覺化圖表（07–09 各自輸出單張圖，10 用 patchwork 組成 README 的總覽圖）
 source("R/visualization/07_visualize_sp500_valuation_timeline.R")
 source("R/visualization/08_visualize_macro_indicator_trends.R")
 source("R/visualization/09_visualize_valuation_distribution.R")
+source("R/visualization/10_combine_dashboard.R")
 ```
 
 `data/processed/` 中已附上前處理完成的最終資料集，若只想重現視覺化或接續 KNIME 建模，可以跳過前處理步驟直接使用。
